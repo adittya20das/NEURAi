@@ -1,0 +1,1 @@
+import type { Conversation, Message } from "@/core/types"; export interface ConversationRepository { get(id: string, userId: string): Promise<Conversation | null>; list(userId: string): Promise<Conversation[]>; messages(id: string): Promise<Message[]>; }

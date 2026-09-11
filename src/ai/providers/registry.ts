@@ -1,0 +1,2 @@
+import type { AIProvider } from "./types";
+export class ProviderRegistry { private providers = new Map<string, AIProvider>(); register(provider: AIProvider) { this.providers.set(provider.id, provider); } select(task: string) { return [...this.providers.values()].find(p => p.capabilities.tasks.includes(task as never)) ?? [...this.providers.values()].find(p => p.capabilities.tasks.includes("general")); } }

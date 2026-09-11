@@ -1,0 +1,1 @@
+export interface MemoryRecord { id: string; userId: string; content: string; importance: number; createdAt: Date; } export interface MemoryService { recall(userId: string, query: string): Promise<MemoryRecord[]>; }

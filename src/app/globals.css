@@ -1,0 +1,4 @@
+@import "katex/dist/katex.min.css";
+@import "tailwindcss";
+:root { color-scheme: dark; } * { box-sizing: border-box; } body { margin: 0; background: #050711; color: #f4f7ff; font-family: Arial, Helvetica, sans-serif; } button, textarea { font: inherit; } ::selection { background: #23c9f044; }
+.cosmos { background-image: radial-gradient(circle at 18% 15%, #6537c52d, transparent 30%), radial-gradient(circle at 82% 8%, #00bff522, transparent 25%), linear-gradient(#789cff08 1px, transparent 1px), linear-gradient(90deg, #789cff08 1px, transparent 1px); background-size: auto,auto,32px 32px,32px 32px; }
