@@ -512,21 +512,21 @@ function Sidebar({
 
               <button
                 onClick={() => onRename(conversation.id)}
-                className="hidden px-2 text-xs text-slate-500 hover:text-cyan-300 group-hover:block"
+                className="block px-2 text-xs text-slate-500 hover:text-blue-400 md:hidden md:group-hover:block"
                 aria-label={`Rename ${conversation.title}`}
                 title="Rename"
               >
                 ✎
               </button>
 
-              <button
-                onClick={() => onDelete(conversation.id)}
-                className="hidden px-2 pr-3 text-xs text-slate-500 hover:text-red-400 group-hover:block"
-                aria-label={`Delete ${conversation.title}`}
-                title="Delete"
-              >
-                ×
-              </button>
+             <button
+  onClick={() => onDelete(conversation.id)}
+  className="block px-2 pr-3 text-xs text-slate-500 hover:text-red-400 md:hidden md:group-hover:block"
+  aria-label={`Delete ${conversation.title}`}
+  title="Delete"
+>
+  ×
+</button>
             </div>
           ))}
         </nav>
