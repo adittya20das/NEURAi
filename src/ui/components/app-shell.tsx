@@ -1,6 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -51,15 +56,6 @@ type ChatResult = {
 
 const STORAGE_KEY = "neurai-conversations";
 
-/*
- * Normalize LaTeX delimiters that AI providers commonly return.
- *
- * \[ ... \]  ->  $$ ... $$
- * \( ... \)  ->  $ ... $
- *
- * This lets remark-math + KaTeX render both normal Markdown
- * math syntax and common LaTeX delimiters.
- */
 function normalizeMathDelimiters(content: string) {
   return content
     .replace(/\\\[/g, "$$")
@@ -293,18 +289,11 @@ function AssistantMessage({
   return (
     <div className="px-1 py-1 text-sm leading-7 text-slate-200">
       <ReactMarkdown
-        remarkPlugins={[
-          remarkGfm,
-          remarkMath,
-        ]}
-        rehypePlugins={[
-          rehypeKatex,
-        ]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           p: ({ children }) => (
-            <p className="mb-4 last:mb-0">
-              {children}
-            </p>
+            <p className="mb-4 last:mb-0">{children}</p>
           ),
 
           strong: ({ children }) => (
@@ -314,9 +303,7 @@ function AssistantMessage({
           ),
 
           em: ({ children }) => (
-            <em className="italic">
-              {children}
-            </em>
+            <em className="italic">{children}</em>
           ),
 
           h1: ({ children }) => (
@@ -350,9 +337,7 @@ function AssistantMessage({
           ),
 
           li: ({ children }) => (
-            <li className="pl-1">
-              {children}
-            </li>
+            <li className="pl-1">{children}</li>
           ),
 
           blockquote: ({ children }) => (
@@ -439,6 +424,20 @@ function AssistantMessage({
   );
 }
 
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2 px-1 py-2 text-xs text-slate-500">
+      <span>Neurai is thinking</span>
+
+      <span className="flex items-center gap-1">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-500 [animation-delay:300ms]" />
+      </span>
+    </div>
+  );
+}
+
 function Sidebar({
   open,
   close,
@@ -519,14 +518,14 @@ function Sidebar({
                 ✎
               </button>
 
-             <button
-  onClick={() => onDelete(conversation.id)}
-  className="block px-2 pr-3 text-xs text-slate-500 hover:text-red-400 md:hidden md:group-hover:block"
-  aria-label={`Delete ${conversation.title}`}
-  title="Delete"
->
-  ×
-</button>
+              <button
+                onClick={() => onDelete(conversation.id)}
+                className="block px-2 pr-3 text-xs text-slate-500 hover:text-red-400 md:hidden md:group-hover:block"
+                aria-label={`Delete ${conversation.title}`}
+                title="Delete"
+              >
+                ×
+              </button>
             </div>
           ))}
         </nav>
@@ -579,6 +578,11 @@ export function AppShell() {
 
   const [isAuthenticated, setIsAuthenticated] =
     useState(false);
+
+  const messagesContainerRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const shouldAutoScrollRef = useRef(true);
 
   useEffect(() => {
     async function loadConversations() {
@@ -720,8 +724,7 @@ export function AppShell() {
           throw new Error(errorMessage);
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
         const rawRemote = Array.isArray(
           data.conversations,
@@ -818,16 +821,65 @@ export function AppShell() {
             conversation.id === activeId,
         ) ?? null;
 
+  /*
+   * Keep the message viewport pinned to the latest
+   * message whenever a new message/response appears.
+   */
+  useEffect(() => {
+    const container =
+      messagesContainerRef.current;
+
+    if (!container || !shouldAutoScrollRef.current) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [
+    activeId,
+    activeConversation?.messages.length,
+    pending,
+  ]);
+
+  /*
+   * If the user manually scrolls upward, don't fight them.
+   * Auto-scroll resumes once they are close to the bottom.
+   */
+  function handleMessagesScroll() {
+    const container =
+      messagesContainerRef.current;
+
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight -
+      container.scrollTop -
+      container.clientHeight;
+
+    shouldAutoScrollRef.current =
+      distanceFromBottom < 120;
+  }
+
   function newChat() {
     setActiveId(null);
     setText("");
     setOpen(false);
+    shouldAutoScrollRef.current = true;
   }
 
   function selectConversation(id: string) {
     setActiveId(id);
     setText("");
     setOpen(false);
+    shouldAutoScrollRef.current = true;
   }
 
   async function renameConversation(id: string) {
@@ -970,6 +1022,7 @@ export function AppShell() {
         }));
 
     setPending(true);
+    shouldAutoScrollRef.current = true;
 
     try {
       let assistantText = "";
@@ -1066,6 +1119,8 @@ export function AppShell() {
 
     setPending(true);
     setText("");
+
+    shouldAutoScrollRef.current = true;
 
     let conversation: Conversation;
     let isNew = false;
@@ -1248,8 +1303,8 @@ export function AppShell() {
   }
 
   return (
-    <main className="min-h-screen bg-[#050713] text-white">
-      <div className="flex min-h-screen">
+    <main className="h-[100dvh] overflow-hidden bg-[#050713] text-white">
+      <div className="flex h-full min-h-0">
         <Sidebar
           open={open}
           close={() => setOpen(false)}
@@ -1261,8 +1316,9 @@ export function AppShell() {
           onDelete={deleteConversation}
         />
 
-        <section className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 items-center border-b border-white/10 px-4 md:px-6">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* Fixed/stationary header */}
+          <header className="z-10 flex h-16 shrink-0 items-center border-b border-white/10 bg-[#050713]/95 px-4 backdrop-blur-xl md:px-6">
             <button
               onClick={() => setOpen(true)}
               className="mr-3 rounded-lg px-2 py-1 text-slate-400 hover:bg-white/5 hover:text-white md:hidden"
@@ -1276,88 +1332,100 @@ export function AppShell() {
             </div>
           </header>
 
-          <div className="flex flex-1 flex-col">
-            {activeConversation &&
-            activeConversation.messages.length >
-              0 ? (
-              <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-8">
-                {activeConversation.messages.map(
-                  (message, index) => (
-                    <div
-                      key={`${message.role}-${index}`}
-                      className={
-                        message.role === "user"
-                          ? "ml-auto max-w-[85%] rounded-2xl bg-blue-500/15 px-4 py-3 text-sm text-slate-100"
-                          : "max-w-[85%]"
-                      }
-                    >
+          {/* Only this area scrolls */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            >
+              {activeConversation &&
+              activeConversation.messages.length >
+                0 ? (
+                <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-8 pb-6">
+                  {activeConversation.messages.map(
+                    (message, index) => (
                       <div
+                        key={`${message.role}-${index}`}
                         className={
-                          message.role === "error"
-                            ? "rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-                            : ""
+                          message.role === "user"
+                            ? "ml-auto max-w-[85%] rounded-2xl bg-blue-500/15 px-4 py-3 text-sm text-slate-100"
+                            : "max-w-[85%]"
                         }
                       >
+                        <div
+                          className={
+                            message.role === "error"
+                              ? "rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+                              : ""
+                          }
+                        >
+                          {message.role ===
+                          "assistant" ? (
+                            <AssistantMessage
+                              content={
+                                message.content
+                              }
+                            />
+                          ) : (
+                            message.content
+                          )}
+                        </div>
+
                         {message.role ===
-                        "assistant" ? (
-                          <AssistantMessage
-                            content={
-                              message.content
-                            }
-                          />
-                        ) : (
-                          message.content
+                          "assistant" && (
+                          <div className="mt-2 flex items-center gap-1">
+                            <CopyButton
+                              content={
+                                message.content
+                              }
+                            />
+
+                            <button
+                              type="button"
+                              disabled={pending}
+                              onClick={() =>
+                                regenerateConversation(
+                                  activeConversation.id,
+                                  index,
+                                )
+                              }
+                              className="rounded-lg px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-white/[.06] hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                              title="Regenerate response"
+                            >
+                              ↻ Regenerate
+                            </button>
+                          </div>
                         )}
                       </div>
+                    ),
+                  )}
 
-                      {message.role ===
-                        "assistant" && (
-                        <div className="mt-2 flex items-center gap-1">
-                          <CopyButton
-                            content={
-                              message.content
-                            }
-                          />
-
-                          <button
-                            type="button"
-                            disabled={pending}
-                            onClick={() =>
-                              regenerateConversation(
-                                activeConversation.id,
-                                index,
-                              )
-                            }
-                            className="rounded-lg px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-white/[.06] hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
-                            title="Regenerate response"
-                          >
-                            ↻ Regenerate
-                          </button>
-                        </div>
-                      )}
+                  {pending && (
+                    <ThinkingIndicator />
+                  )}
+                </div>
+              ) : (
+                <div className="flex min-h-full items-center justify-center px-6">
+                  <div className="w-full max-w-2xl pb-16 text-center">
+                    <div className="mb-3 text-3xl font-semibold tracking-tight">
+                      How can I help?
                     </div>
-                  ),
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-1 items-center justify-center px-6">
-                <div className="w-full max-w-2xl text-center">
-                  <div className="mb-3 text-3xl font-semibold tracking-tight">
-                    How can I help?
-                  </div>
 
-                  <div className="text-sm text-slate-500">
-                    Ask Neurai anything.
+                    <div className="text-sm text-slate-500">
+                      Ask Neurai anything.
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
+            {/* Input stays outside the scrolling message area */}
             <form
               onSubmit={submit}
-              className="mx-auto w-full max-w-4xl px-4 pb-5"
+              className="z-10 mx-auto w-full max-w-4xl shrink-0 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2"
             >
-              <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[.04] p-2 shadow-2xl shadow-black/20">
+              <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-[#0b0f20]/95 p-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
                 <textarea
                   value={text}
                   onChange={(event) =>
@@ -1377,7 +1445,7 @@ export function AppShell() {
                   }}
                   placeholder="Message Neurai..."
                   rows={1}
-                  className="min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600"
+                  className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600"
                 />
 
                 <button
@@ -1386,7 +1454,7 @@ export function AppShell() {
                     pending ||
                     !text.trim()
                   }
-                  className="h-11 rounded-xl bg-gradient-to-r from-cyan-300 to-blue-500 px-5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-cyan-300 to-blue-500 px-5 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {pending ? "..." : "Send"}
                 </button>
